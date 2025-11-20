@@ -197,6 +197,7 @@ class CoachingAssistant:
     def get_embeddings_batch(self, texts, model="text-embedding-3-small", batch_size=1):
         """複数テキストの埋め込みを効率的に取得（超保守的レート制限対応）"""
         all_embeddings = []
+        progress_placeholder = st.empty()
         
         for i in range(0, len(texts), batch_size):
             batch = texts[i:i + batch_size]
@@ -207,9 +208,11 @@ class CoachingAssistant:
                 embeddings = [item.embedding for item in response.data]
                 all_embeddings.extend(embeddings)
                 
-                # 進捗表示
+                # 進捗表示（完了後は自動でクリア）
                 progress = min(i + len(batch), len(texts))
-                st.info(f"処理中: {progress}/{len(texts)} チャンク（約{int(progress/len(texts)*100)}%）")
+                progress_placeholder.info(
+                    f"処理中: {progress}/{len(texts)} チャンク（約{int(progress/len(texts)*100)}%）"
+                )
                 
             except Exception as e:
                 error_msg = str(e)
@@ -234,6 +237,7 @@ class CoachingAssistant:
                         2. Organization/Projectの設定を確認
                         3. Tier（利用プラン）を確認
                         """)
+                        progress_placeholder.empty()
                         return None
                 else:
                     st.warning("""
@@ -245,12 +249,14 @@ class CoachingAssistant:
                     1. 新しいAPIキーを作成
                     2. Limitsページで制限を確認
                     """)
+                    progress_placeholder.empty()
                     return None
             
             # レート制限対策（非常に保守的）
             if i + batch_size < len(texts):
                 time.sleep(5.0)  # 2秒 → 5秒に変更
         
+        progress_placeholder.empty()
         return all_embeddings
     
     def build_index(self):
@@ -261,36 +267,40 @@ class CoachingAssistant:
         # チャンク化
         self.chunks, self.chunk_metadata = self.chunk_data(data)
         
-        st.info(f"📊 {len(self.chunks)} 個のチャンクを処理中...")
+        status_placeholder = st.empty()
+        status_placeholder.info(f"📊 {len(self.chunks)} 個のチャンクを処理中...")
         
-        # 埋め込みベクトル取得
-        embeddings = self.get_embeddings_batch(self.chunks)
-        
-        if not embeddings:
-            st.error("❌ 埋め込みベクトルの取得に失敗しました")
-            return False
-        
-        # NumPy配列に変換
-        embeddings_np = np.array(embeddings, dtype=np.float32)
-        
-        # FAISSインデックス構築
-        dimension = embeddings_np.shape[1]
-        self.index = faiss.IndexFlatL2(dimension)
-        self.index.add(embeddings_np)
-        
-        # インデックスを保存
-        faiss.write_index(self.index, str(self.index_path))
-        
-        # チャンクとメタデータを保存
-        with open(self.chunks_path, 'wb') as f:
-            pickle.dump({
-                'chunks': self.chunks,
-                'metadata': self.chunk_metadata,
-                'data_hash': self.get_data_hash()
-            }, f)
-        
-        st.success(f"✅ インデックス構築完了: {len(self.chunks)} 個のチャンク")
-        return True
+        try:
+            # 埋め込みベクトル取得
+            embeddings = self.get_embeddings_batch(self.chunks)
+            
+            if not embeddings:
+                st.error("❌ 埋め込みベクトルの取得に失敗しました")
+                return False
+            
+            # NumPy配列に変換
+            embeddings_np = np.array(embeddings, dtype=np.float32)
+            
+            # FAISSインデックス構築
+            dimension = embeddings_np.shape[1]
+            self.index = faiss.IndexFlatL2(dimension)
+            self.index.add(embeddings_np)
+            
+            # インデックスを保存
+            faiss.write_index(self.index, str(self.index_path))
+            
+            # チャンクとメタデータを保存
+            with open(self.chunks_path, 'wb') as f:
+                pickle.dump({
+                    'chunks': self.chunks,
+                    'metadata': self.chunk_metadata,
+                    'data_hash': self.get_data_hash()
+                }, f)
+            
+            st.success(f"✅ インデックス構築完了: {len(self.chunks)} 個のチャンク")
+            return True
+        finally:
+            status_placeholder.empty()
     
     def load_index(self):
         """保存済みのインデックスを読み込む"""
@@ -408,7 +418,17 @@ class CoachingAssistant:
             
             response = self.client.chat.completions.create(**generation_params)
             
-            answer = response.choices[0].message.content
+            message_content = response.choices[0].message.content
+            if isinstance(message_content, list):
+                parts = []
+                for item in message_content:
+                    if isinstance(item, dict):
+                        parts.append(item.get("text", ""))
+                    else:
+                        parts.append(str(item))
+                answer = "".join(parts).strip()
+            else:
+                answer = (message_content or "").strip()
             return answer, search_results
         
         except Exception as e:
@@ -447,9 +467,6 @@ def main():
     # メインアプリ
     st.title("🎾 テニスコーチング効率化ツール")
     st.write("過去の生徒データから、新しい目標設定の参考情報をAI検索できます")
-    
-    # データファイル情報を表示
-    st.info(f"📁 データファイル: {DATA_FILE}")
     
     # アシスタントの初期化
     if 'assistant' not in st.session_state:
@@ -506,9 +523,6 @@ def main():
             total_records = sum(len(s.get('records', [])) for s in data.values())
         st.metric("記録数", total_records)
     
-    # メインコンテンツ
-    st.markdown("---")
-    
     # 検索入力
     st.subheader("🔍 質問を入力")
     query = st.text_area(
@@ -542,6 +556,10 @@ def main():
             with st.expander(f"📄 参考データ {i} - {result['metadata'].get('name', '不明')} ({result['metadata'].get('type', 'unknown')})"):
                 st.text(result['chunk'])
                 st.caption(f"関連度スコア: {result['distance']:.4f}")
+    
+    # 付帯情報
+    st.markdown("---")
+    st.info(f"📁 データファイル: {DATA_FILE}")
 
 if __name__ == "__main__":
     main()
