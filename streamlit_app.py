@@ -194,8 +194,8 @@ class CoachingAssistant:
             st.error(f"❌ Embedding取得エラー: {e}")
             return None
     
-    def get_embeddings_batch(self, texts, model="text-embedding-3-small", batch_size=100):
-        """複数テキストの埋め込みを効率的に取得"""
+    def get_embeddings_batch(self, texts, model="text-embedding-3-small", batch_size=1):
+        """複数テキストの埋め込みを効率的に取得（超保守的レート制限対応）"""
         all_embeddings = []
         
         for i in range(0, len(texts), batch_size):
@@ -206,13 +206,50 @@ class CoachingAssistant:
                 response = self.client.embeddings.create(input=batch, model=model)
                 embeddings = [item.embedding for item in response.data]
                 all_embeddings.extend(embeddings)
+                
+                # 進捗表示
+                progress = min(i + len(batch), len(texts))
+                st.info(f"処理中: {progress}/{len(texts)} チャンク（約{int(progress/len(texts)*100)}%）")
+                
             except Exception as e:
-                st.error(f"❌ Batch embedding取得エラー: {e}")
-                return None
+                error_msg = str(e)
+                st.error(f"❌ Batch embedding取得エラー: {error_msg}")
+                
+                # エラーがレート制限の場合、より長く待つ
+                if "rate" in error_msg.lower() or "429" in error_msg:
+                    st.warning("⏱️ レート制限を検出。60秒待機してから再試行します...")
+                    time.sleep(60)
+                    # 再試行
+                    try:
+                        response = self.client.embeddings.create(input=batch, model=model)
+                        embeddings = [item.embedding for item in response.data]
+                        all_embeddings.extend(embeddings)
+                        progress = min(i + len(batch), len(texts))
+                        st.success(f"✅ 再試行成功: {progress}/{len(texts)} チャンク")
+                    except Exception as e2:
+                        st.error(f"❌ 再試行も失敗: {e2}")
+                        st.warning("""
+                        **解決方法:**
+                        1. 新しいAPIキーを作成
+                        2. Organization/Projectの設定を確認
+                        3. Tier（利用プラン）を確認
+                        """)
+                        return None
+                else:
+                    st.warning("""
+                    **このエラーの原因:**
+                    - APIキーの問題
+                    - Project/Organizationの制限
+                    
+                    **解決方法:**
+                    1. 新しいAPIキーを作成
+                    2. Limitsページで制限を確認
+                    """)
+                    return None
             
-            # レート制限対策
+            # レート制限対策（非常に保守的）
             if i + batch_size < len(texts):
-                time.sleep(0.1)
+                time.sleep(5.0)  # 2秒 → 5秒に変更
         
         return all_embeddings
     
