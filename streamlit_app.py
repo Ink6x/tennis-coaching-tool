@@ -391,15 +391,22 @@ class CoachingAssistant:
         
         try:
             # OpenAI APIで回答生成
-            response = self.client.chat.completions.create(
-                model=model,
-                messages=[
+            generation_params = {
+                "model": model,
+                "messages": [
                     {"role": "system", "content": "あなたは経験豊富なコーチングアシスタントです。"},
                     {"role": "user", "content": prompt}
                 ],
-                temperature=0.7,
-                max_tokens=1000
-            )
+                "temperature": 0.7
+            }
+            
+            # gpt-5系モデルなど、新しいエンドポイントは max_completion_tokens を要求
+            if model.lower().startswith("gpt-5") or model.lower().startswith("o1"):
+                generation_params["max_completion_tokens"] = 1000
+            else:
+                generation_params["max_tokens"] = 1000
+            
+            response = self.client.chat.completions.create(**generation_params)
             
             answer = response.choices[0].message.content
             return answer, search_results
