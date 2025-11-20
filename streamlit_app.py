@@ -471,7 +471,7 @@ def main():
         # モデル選択
         model_name = st.selectbox(
             "使用モデル",
-            ["gpt-4o-mini", "gpt-4o", "gpt-3.5-turbo"],
+            ["gpt-5.1", "gpt-4o-mini", "gpt-4o", "gpt-3.5-turbo"],
             index=0
         )
         
