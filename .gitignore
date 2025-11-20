@@ -1,0 +1,37 @@
+```
+
+**メモ帳に以下をコピペして保存**:
+```
+# 環境変数ファイル
+.env
+
+# Pythonキャッシュ
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# FAISSインデックス（自動生成）
+data/faiss_index.bin
+data/chunks.pkl
+
+# データファイル（大量のCSV）
+data/raw/
+*.csv
+*.zip
+
+# 仮想環境
+venv/
+env/
+
+# IDE設定
+.vscode/
+.idea/
+
+# Windowsキャッシュ
+Thumbs.db
+Desktop.ini
+
+# その他
+*.db
+*.html
