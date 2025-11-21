@@ -406,19 +406,41 @@ class CoachingAssistant:
                 "messages": [
                     {"role": "system", "content": "あなたは経験豊富なコーチングアシスタントです。"},
                     {"role": "user", "content": prompt}
-                ],
-                "temperature": 0.7
+                ]
             }
             
-            # gpt-5系モデルなど、新しいエンドポイントは max_completion_tokens を要求
+            # gpt-5系モデルやo1系モデルは特別な扱い
             if model.lower().startswith("gpt-5") or model.lower().startswith("o1"):
-                generation_params["max_completion_tokens"] = 1000
+                generation_params["max_completion_tokens"] = 2000  # 1000 → 2000に増やす
+                # GPT-5.1などの推論モデルはtemperatureをサポートしない場合がある
+                # temperatureは省略
             else:
                 generation_params["max_tokens"] = 1000
+                generation_params["temperature"] = 0.7
             
             response = self.client.chat.completions.create(**generation_params)
             
-            message_content = response.choices[0].message.content
+            # レスポンスの処理（複数の形式に対応）
+            message = response.choices[0].message
+            
+            # reasoning_content（推論過程）がある場合はスキップ
+            # 実際の回答はcontentに含まれる
+            message_content = message.content
+            
+            if message_content is None:
+                # contentがNullの場合、他のフィールドをチェック
+                if hasattr(message, 'text'):
+                    message_content = message.text
+                elif hasattr(message, 'reasoning_content'):
+                    # 推論過程がある場合、それも含める
+                    st.info("🤔 推論過程を表示しています...")
+                    message_content = f"【推論過程】\n{message.reasoning_content}\n\n【回答】\n（回答が見つかりませんでした）"
+                else:
+                    st.error("⚠️ レスポンスにcontentが含まれていません")
+                    st.json(response.model_dump())  # デバッグ用
+                    return "回答の取得に失敗しました。", search_results
+            
+            # contentが配列の場合の処理
             if isinstance(message_content, list):
                 parts = []
                 for item in message_content:
@@ -429,10 +451,20 @@ class CoachingAssistant:
                 answer = "".join(parts).strip()
             else:
                 answer = (message_content or "").strip()
+            
+            # 空の回答の場合
+            if not answer:
+                st.warning("⚠️ 空の回答が返されました")
+                st.json(response.model_dump())  # デバッグ用
+                return "回答が空でした。モデルを変更してお試しください。", search_results
+            
             return answer, search_results
         
         except Exception as e:
             st.error(f"❌ 回答生成エラー: {e}")
+            # 詳細なエラー情報を表示
+            import traceback
+            st.error(f"詳細: {traceback.format_exc()}")
             return f"エラーが発生しました: {e}", search_results
 
 # ==========================================
