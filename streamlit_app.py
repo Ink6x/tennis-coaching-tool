@@ -381,8 +381,21 @@ class CoachingAssistant:
         # コンテキストを構築
         context = "\n\n---\n\n".join([r['chunk'] for r in search_results])
         
-        # プロンプト作成
-        prompt = f"""あなたは子供向け(10-18歳)の1on1コーチングを行うコーチのアシスタントです。
+        # プロンプト作成（o1シリーズ用に最適化）
+        if model.lower().startswith("gpt-5") or model.lower().startswith("o1"):
+            # o1シリーズは推論が得意なので、シンプルなプロンプトで十分
+            prompt = f"""以下の過去の生徒データを参考に、質問に答えてください。
+
+【過去のデータ】
+{context}
+
+【質問】
+{query}
+
+過去の成功事例を参考に、具体的で実践的なアドバイスを提供してください。"""
+        else:
+            # 通常のモデル用には詳細なプロンプト
+            prompt = f"""あなたは子供向け(10-18歳)の1on1コーチングを行うコーチのアシスタントです。
 過去の生徒データから、新しい生徒への目標設定や指導のアドバイスを提供してください。
 
 【参考となる過去のデータ】
@@ -403,18 +416,24 @@ class CoachingAssistant:
             # OpenAI APIで回答生成
             generation_params = {
                 "model": model,
-                "messages": [
-                    {"role": "system", "content": "あなたは経験豊富なコーチングアシスタントです。"},
-                    {"role": "user", "content": prompt}
-                ]
             }
             
             # gpt-5系モデルやo1系モデルは特別な扱い
             if model.lower().startswith("gpt-5") or model.lower().startswith("o1"):
-                generation_params["max_completion_tokens"] = 2000  # 1000 → 2000に増やす
+                # o1シリーズは推論に多くのトークンを使うため、十分な余裕を持たせる
+                # 推論トークン + 出力トークンの合計がmax_completion_tokensになる
+                generation_params["max_completion_tokens"] = 16000
+                # o1シリーズはsystem messageをサポートしないため、user messageのみ
+                generation_params["messages"] = [
+                    {"role": "user", "content": prompt}
+                ]
                 # GPT-5.1などの推論モデルはtemperatureをサポートしない場合がある
                 # temperatureは省略
             else:
+                generation_params["messages"] = [
+                    {"role": "system", "content": "あなたは経験豊富なコーチングアシスタントです。"},
+                    {"role": "user", "content": prompt}
+                ]
                 generation_params["max_tokens"] = 1000
                 generation_params["temperature"] = 0.7
             
