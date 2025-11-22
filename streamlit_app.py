@@ -129,240 +129,129 @@ class CoachingAssistant:
             return hashlib.md5(f.read()).hexdigest()
     
     def chunk_data(self, data):
-        """データをチャンクに分割（実際のデータ構造に合わせた実装）"""
+        """データを生徒ごとにまとめた大きなチャンクに分割（最適化版）"""
         chunks = []
         metadata = []
         
-        # データは配列形式で生徒情報を含む
+        # 各生徒のデータを1-2個の大きなチャンクにまとめる
         for student in data:
             student_name = student.get('name', '不明')
             
-            # 基本情報チャンク
-            basic_info = f"""
-生徒名: {student_name}
-"""
-            # Visionデータをチャンク化
-            if 'vision' in student:
-                for vision in student['vision']:
+            # === チャンク1: Vision + Plan の統合チャンク ===
+            vision_plan_content = f"【生徒名: {student_name}】\n\n"
+            
+            # Vision情報をまとめて追加
+            if 'vision' in student and student['vision']:
+                vision_plan_content += "■ Vision（目標設定）\n"
+                for idx, vision in enumerate(student['vision'], 1):
                     if vision.get('goal'):
-                        chunk_text = f"""
-【生徒: {student_name}】
-タイプ: Vision（目標設定）
-目標: {vision['goal']}
-"""
-                        chunks.append(chunk_text.strip())
-                        metadata.append({
-                            'student_name': student_name,
-                            'type': 'vision',
-                            'subtype': '目標'
-                        })
+                        vision_plan_content += f"  目標{idx}: {vision['goal']}\n"
                     
-                    # 達成理由をチャンク化
                     if 'reasons' in vision:
-                        reasons_text = []
                         reasons = vision['reasons']
-                        if reasons.get('visible_self'):
-                            reasons_text.append("【見える・自分】" + '; '.join(reasons['visible_self']))
-                        if reasons.get('invisible_self'):
-                            reasons_text.append("【見えない・自分】" + '; '.join(reasons['invisible_self']))
-                        if reasons.get('visible_others'):
-                            reasons_text.append("【見える・他人】" + '; '.join(reasons['visible_others']))
-                        if reasons.get('invisible_others'):
-                            reasons_text.append("【見えない・他人】" + '; '.join(reasons['invisible_others']))
-                        
-                        if reasons_text:
-                            chunk_text = f"""
-【生徒: {student_name}】
-タイプ: Vision（達成理由）
-達成したい理由: {' '.join(reasons_text)}
-"""
-                            chunks.append(chunk_text.strip())
-                            metadata.append({
-                                'student_name': student_name,
-                                'type': 'vision',
-                                'subtype': '達成理由'
-                            })
+                        if any([reasons.get('visible_self'), reasons.get('invisible_self'), 
+                               reasons.get('visible_others'), reasons.get('invisible_others')]):
+                            vision_plan_content += "  達成したい理由:\n"
+                            if reasons.get('visible_self'):
+                                vision_plan_content += f"    見える・自分: {'; '.join(reasons['visible_self'])}\n"
+                            if reasons.get('invisible_self'):
+                                vision_plan_content += f"    見えない・自分: {'; '.join(reasons['invisible_self'])}\n"
+                            if reasons.get('visible_others'):
+                                vision_plan_content += f"    見える・他人: {'; '.join(reasons['visible_others'])}\n"
+                            if reasons.get('invisible_others'):
+                                vision_plan_content += f"    見えない・他人: {'; '.join(reasons['invisible_others'])}\n"
                     
-                    # ルーティンをチャンク化
                     if vision.get('routine'):
-                        chunk_text = f"""
-【生徒: {student_name}】
-タイプ: Vision（ルーティン）
-ルーティン: {'; '.join(vision['routine'])}
-"""
-                        chunks.append(chunk_text.strip())
-                        metadata.append({
-                            'student_name': student_name,
-                            'type': 'vision',
-                            'subtype': 'ルーティン'
-                        })
+                        vision_plan_content += f"  ルーティン: {'; '.join(vision['routine'])}\n"
+                    vision_plan_content += "\n"
             
-            # Planデータをチャンク化
-            if 'plan' in student:
-                for plan in student['plan']:
+            # Plan情報をまとめて追加
+            if 'plan' in student and student['plan']:
+                vision_plan_content += "■ Plan（計画）\n"
+                for idx, plan in enumerate(student['plan'], 1):
                     if plan.get('goal'):
-                        chunk_text = f"""
-【生徒: {student_name}】
-タイプ: Plan（計画）
-計画目標: {plan['goal']}
-"""
-                        chunks.append(chunk_text.strip())
-                        metadata.append({
-                            'student_name': student_name,
-                            'type': 'plan',
-                            'subtype': '計画目標'
-                        })
-                    
+                        vision_plan_content += f"  計画目標{idx}: {plan['goal']}\n"
                     if plan.get('strengths'):
-                        chunk_text = f"""
-【生徒: {student_name}】
-タイプ: Plan（武器）
-武器: {plan['strengths']}
-"""
-                        chunks.append(chunk_text.strip())
-                        metadata.append({
-                            'student_name': student_name,
-                            'type': 'plan',
-                            'subtype': '武器'
-                        })
-                    
+                        vision_plan_content += f"  武器: {plan['strengths']}\n"
                     if plan.get('challenges'):
-                        chunk_text = f"""
-【生徒: {student_name}】
-タイプ: Plan（課題）
-課題: {plan['challenges']}
-"""
-                        chunks.append(chunk_text.strip())
-                        metadata.append({
-                            'student_name': student_name,
-                            'type': 'plan',
-                            'subtype': '課題'
-                        })
+                        vision_plan_content += f"  課題: {plan['challenges']}\n"
                     
-                    # ステップをチャンク化
-                    if 'steps' in plan:
+                    if 'steps' in plan and plan['steps']:
+                        vision_plan_content += "  ステップ:\n"
                         for step in plan['steps']:
-                            chunk_text = f"""
-【生徒: {student_name}】
-タイプ: Plan（ステップ）
-日付: {step.get('date', '不明')}
-目標: {step.get('goal', '')}
-詳細: {step.get('details', '')}
-"""
-                            chunks.append(chunk_text.strip())
-                            metadata.append({
-                                'student_name': student_name,
-                                'type': 'plan',
-                                'subtype': 'ステップ',
-                                'date': step.get('date', '不明')
-                            })
+                            vision_plan_content += f"    - {step.get('date', '不明')}: {step.get('goal', '')} "
+                            if step.get('details'):
+                                vision_plan_content += f"({step['details']})"
+                            vision_plan_content += "\n"
+                    vision_plan_content += "\n"
             
-            # Reviewデータをチャンク化
-            if 'review' in student:
-                for review in student['review']:
+            # Vision + Planのチャンクを追加（内容がある場合のみ）
+            if len(vision_plan_content.strip()) > 50:
+                chunks.append(vision_plan_content.strip())
+                metadata.append({
+                    'student_name': student_name,
+                    'type': 'vision_plan',
+                    'content_type': 'Vision+Plan統合'
+                })
+            
+            # === チャンク2: Review + Meeting Memos の統合チャンク ===
+            review_memo_content = f"【生徒名: {student_name}】\n\n"
+            
+            # Review情報をまとめて追加
+            if 'review' in student and student['review']:
+                review_memo_content += "■ Review（振り返り）\n"
+                for idx, review in enumerate(student['review'], 1):
+                    review_memo_content += f"  振り返り{idx}:\n"
+                    
                     if review.get('achievement_score'):
-                        chunk_text = f"""
-【生徒: {student_name}】
-タイプ: Review（振り返り）
-達成度評価: {review['achievement_score']}
-"""
-                        chunks.append(chunk_text.strip())
-                        metadata.append({
-                            'student_name': student_name,
-                            'type': 'review',
-                            'subtype': '達成度'
-                        })
-                    
+                        review_memo_content += f"    達成度評価: {review['achievement_score']}\n"
                     if review.get('quantitative'):
-                        chunk_text = f"""
-【生徒: {student_name}】
-タイプ: Review（定量評価）
-定量評価: {review['quantitative']}
-"""
-                        chunks.append(chunk_text.strip())
-                        metadata.append({
-                            'student_name': student_name,
-                            'type': 'review',
-                            'subtype': '定量評価'
-                        })
-                    
+                        review_memo_content += f"    定量評価: {review['quantitative']}\n"
                     if review.get('qualitative'):
-                        chunk_text = f"""
-【生徒: {student_name}】
-タイプ: Review（定性評価）
-定性評価: {review['qualitative']}
-"""
-                        chunks.append(chunk_text.strip())
-                        metadata.append({
-                            'student_name': student_name,
-                            'type': 'review',
-                            'subtype': '定性評価'
-                        })
+                        review_memo_content += f"    定性評価: {review['qualitative']}\n"
                     
-                    # 理由をチャンク化
-                    if 'reasons' in review:
-                        for reason in review['reasons']:
-                            chunk_text = f"""
-【生徒: {student_name}】
-タイプ: Review（達成/未達成の理由）
-理由: {reason}
-"""
-                            chunks.append(chunk_text.strip())
-                            metadata.append({
-                                'student_name': student_name,
-                                'type': 'review',
-                                'subtype': '理由'
-                            })
+                    if 'reasons' in review and review['reasons']:
+                        review_memo_content += "    理由:\n"
+                        for reason in review['reasons'][:3]:  # 最初の3つまで
+                            review_memo_content += f"      - {reason}\n"
+                        if len(review['reasons']) > 3:
+                            review_memo_content += f"      （他{len(review['reasons'])-3}件）\n"
                     
-                    # 学びをチャンク化
-                    if 'learnings' in review:
-                        for learning in review['learnings']:
-                            chunk_text = f"""
-【生徒: {student_name}】
-タイプ: Review（学び）
-学んだこと: {learning}
-"""
-                            chunks.append(chunk_text.strip())
-                            metadata.append({
-                                'student_name': student_name,
-                                'type': 'review',
-                                'subtype': '学び'
-                            })
+                    if 'learnings' in review and review['learnings']:
+                        review_memo_content += "    学び:\n"
+                        for learning in review['learnings'][:3]:  # 最初の3つまで
+                            review_memo_content += f"      - {learning}\n"
+                        if len(review['learnings']) > 3:
+                            review_memo_content += f"      （他{len(review['learnings'])-3}件）\n"
                     
                     if review.get('next_goal'):
-                        chunk_text = f"""
-【生徒: {student_name}】
-タイプ: Review（次の目標）
-次の目標: {review['next_goal']}
-"""
-                        chunks.append(chunk_text.strip())
-                        metadata.append({
-                            'student_name': student_name,
-                            'type': 'review',
-                            'subtype': '次の目標'
-                        })
+                        review_memo_content += f"    次の目標: {review['next_goal']}\n"
+                    review_memo_content += "\n"
             
-            # Meeting Memosをチャンク化
-            if 'meeting_memos' in student:
-                for memo in student['meeting_memos']:
+            # Meeting Memos情報をまとめて追加（要約版）
+            if 'meeting_memos' in student and student['meeting_memos']:
+                review_memo_content += "■ Meeting Memos（ミーティング記録）\n"
+                for idx, memo in enumerate(student['meeting_memos'][:5], 1):  # 最新5件まで
                     content = memo.get('content', '')
                     if content:
-                        # 長いメモは分割
-                        chunk_size = 500
-                        for i in range(0, len(content), chunk_size):
-                            chunk_content = content[i:i+chunk_size]
-                            if len(chunk_content.strip()) > 50:  # 短すぎるチャンクは無視
-                                chunk_text = f"""
-【生徒: {student_name}】
-タイプ: Meeting Memo
-内容: {chunk_content}
-"""
-                                chunks.append(chunk_text.strip())
-                                metadata.append({
-                                    'student_name': student_name,
-                                    'type': 'meeting_memo',
-                                    'filename': memo.get('filename', '不明')
-                                })
+                        # 内容を要約（最初の500文字まで）
+                        summary = content[:500]
+                        if len(content) > 500:
+                            summary += "..."
+                        review_memo_content += f"  MTG{idx} ({memo.get('filename', '不明')}):\n"
+                        review_memo_content += f"    {summary}\n\n"
+                
+                if len(student['meeting_memos']) > 5:
+                    review_memo_content += f"  （他{len(student['meeting_memos'])-5}件のミーティング記録）\n"
+            
+            # Review + Meeting Memosのチャンクを追加（内容がある場合のみ）
+            if len(review_memo_content.strip()) > 50:
+                chunks.append(review_memo_content.strip())
+                metadata.append({
+                    'student_name': student_name,
+                    'type': 'review_memo',
+                    'content_type': 'Review+MeetingMemo統合'
+                })
         
         return chunks, metadata
     
@@ -370,20 +259,24 @@ class CoachingAssistant:
         """テキストの埋め込みベクトルを取得"""
         try:
             text = text.replace("\n", " ")
+            # 長すぎるテキストは切り詰め（8191トークン制限対策）
+            if len(text) > 8000:
+                text = text[:8000]
             response = self.client.embeddings.create(input=[text], model=model)
             return response.data[0].embedding
         except Exception as e:
             st.error(f"❌ Embedding取得エラー: {e}")
             return None
     
-    def get_embeddings_batch(self, texts, model="text-embedding-3-small", batch_size=1):
-        """複数テキストの埋め込みを効率的に取得（超保守的レート制限対応）"""
+    def get_embeddings_batch(self, texts, model="text-embedding-3-small", batch_size=5):
+        """複数テキストの埋め込みを効率的に取得"""
         all_embeddings = []
         progress_placeholder = st.empty()
         
         for i in range(0, len(texts), batch_size):
             batch = texts[i:i + batch_size]
-            batch = [text.replace("\n", " ") for text in batch]
+            # 各テキストの長さを制限
+            batch = [text.replace("\n", " ")[:8000] for text in batch]
             
             try:
                 response = self.client.embeddings.create(input=batch, model=model)
@@ -393,22 +286,21 @@ class CoachingAssistant:
                 # 進捗表示
                 progress = min(i + len(batch), len(texts))
                 progress_placeholder.info(
-                    f"処理中: {progress}/{len(texts)} チャンク（約{int(progress/len(texts)*100)}%）"
+                    f"処理中: {progress}/{len(texts)} チャンク"
                 )
                 
-                # レート制限対策のため少し待つ
+                # レート制限対策のため少し待つ（チャンク数が少ないので短めで良い）
                 if i + batch_size < len(texts):
-                    time.sleep(0.5)
+                    time.sleep(0.2)
                 
             except Exception as e:
                 error_msg = str(e)
                 st.error(f"❌ Batch embedding取得エラー: {error_msg}")
                 
-                # エラーがレート制限の場合、より長く待つ
+                # エラーがレート制限の場合、待機して再試行
                 if "rate" in error_msg.lower() or "429" in error_msg:
-                    st.warning("⏱️ レート制限を検出。60秒待機してから再試行します...")
-                    time.sleep(60)
-                    # 再試行
+                    st.warning("⏱️ レート制限を検出。30秒待機してから再試行します...")
+                    time.sleep(30)
                     try:
                         response = self.client.embeddings.create(input=batch, model=model)
                         embeddings = [item.embedding for item in response.data]
@@ -441,8 +333,8 @@ class CoachingAssistant:
             
             st.info(f"📄 {len(self.chunks)} 個のチャンクを作成しました")
             
-            # Embeddings取得（レート制限対策：バッチサイズ1）
-            embeddings = self.get_embeddings_batch(self.chunks, batch_size=1)
+            # Embeddings取得（バッチサイズを大きく）
+            embeddings = self.get_embeddings_batch(self.chunks, batch_size=5)
             
             if embeddings is None:
                 st.error("❌ Embeddingの取得に失敗しました")
@@ -494,7 +386,7 @@ class CoachingAssistant:
             st.warning(f"⚠️ インデックスの読み込みエラー: {e}")
             return False
     
-    def search(self, query, k=10):
+    def search(self, query, k=5):
         """クエリに関連するチャンクを検索"""
         if self.index is None:
             return []
@@ -523,8 +415,8 @@ class CoachingAssistant:
     
     def get_answer(self, query, model="gpt-4o-mini"):
         """RAGを使って質問に回答"""
-        # 関連チャンクを検索
-        search_results = self.search(query, k=15)
+        # 関連チャンクを検索（チャンク数が少ないので上位5個で十分）
+        search_results = self.search(query, k=5)
         
         if not search_results:
             return "関連する情報が見つかりませんでした。", []
@@ -540,35 +432,24 @@ class CoachingAssistant:
 過去の生徒の詳細なコーチング記録（目標設定、計画、振り返り、ミーティング記録）を参照できます。
 
 【回答の原則】
-1. 必ず具体的な生徒名と事例を引用すること
-2. 数値データ（期間、達成度、頻度など）を明示すること
-3. 成功例だけでなく、失敗例や困難だった点も含めること
-4. 複数の生徒の事例を比較・統合して回答すること
-5. 推測ではなく、データに基づいた事実のみを述べること
+1. 具体的な生徒名と事例を引用すること
+2. 特定の競技や学年、年齢、成績など）が一致する場合は、それらの情報を明示すること
+3. 成功例だけでなく、課題や改善点も含めること
+4. 実在の過去データに基づいた具体的なアドバイスをすること
+5. 推測ではなく、データに基づいた事実を述べること
 
 【回答フォーマット】
-## 結論（端的に）
-[質問への直接的な回答を1-2行で]
+## 結論
+[質問への直接的な回答を2-3行で]
 
-## 具体的事例
-**[生徒名]の事例:**
-- 目標: [具体的な目標]
-- 期間: [X週間/Xヶ月]
-- アプローチ: [具体的な方法]
-- 結果: [達成度・学び]
-- 重要ポイント: [成功/失敗の要因]
+## 具体的な参考事例
+[過去の生徒データから関連する事例を2-3つ紹介]
 
-（2-3名の事例を記載）
+## 推奨するアプローチ
+[データから見える効果的な方法を箇条書きで3-5個]
 
-## データから見える傾向
-- [複数事例から見える共通点]
-- [効果的だったアプローチ]
-- [避けるべき落とし穴]
-
-## 推奨事項
-1. [具体的なアクション1]（根拠: [生徒名]の事例）
-2. [具体的なアクション2]（根拠: [生徒名]の事例）
-3. [具体的なアクション3]（根拠: [生徒名]の事例）"""
+## 注意点
+[避けるべきことや気をつける点を2-3個]"""
         
         prompt = f"{context}\n\n質問: {query}"
         
@@ -643,14 +524,14 @@ def main():
     
     # アシスタントの初期化
     if 'assistant' not in st.session_state:
-        with st.spinner("📂 保存済みインデックスを読み込み中..."):
+        with st.spinner("📂 初期化中..."):
             assistant = CoachingAssistant()
             
             # インデックスを読み込む（なければ構築）
             if assistant.load_index():
                 st.success(f"✅ インデックス読み込み完了: {len(assistant.chunks)} 個のチャンク")
             else:
-                st.warning("⚠️ 保存済みインデックスがありません。新規構築します...")
+                st.info("⚠️ 初回起動のため、インデックスを構築します...")
                 if assistant.build_index():
                     st.balloons()
                 else:
@@ -685,39 +566,39 @@ def main():
         st.markdown("---")
         st.markdown("### 📊 統計情報")
         st.metric("チャンク数", len(assistant.chunks))
+        st.metric("チャンクあたりの平均文字数", 
+                  int(sum(len(c) for c in assistant.chunks) / len(assistant.chunks)) if assistant.chunks else 0)
         
         # データ情報
         data = assistant.load_data()
         st.metric("生徒数", len(data))
         
-        # 生徒一覧（上位10名）
-        st.subheader("生徒一覧")
-        for student in data[:10]:
-            with st.expander(student.get('name', '不明')):
-                st.write(f"Vision: {len(student.get('vision', []))}件")
-                st.write(f"Plan: {len(student.get('plan', []))}件")
-                st.write(f"Review: {len(student.get('review', []))}件")
-                st.write(f"MTGメモ: {len(student.get('meeting_memos', []))}件")
+        # 生徒一覧（上位5名のみ表示）
+        st.subheader("生徒一覧（上位5名）")
+        for student in data[:5]:
+            st.write(f"• {student.get('name', '不明')}")
+        if len(data) > 5:
+            st.write(f"  他{len(data)-5}名")
     
     # サンプル質問ボタン
     st.header("🔍 質問を入力")
     
     col1, col2, col3 = st.columns(3)
     with col1:
-        if st.button("📌 3ヶ月で関東大会に出場するには?"):
-            st.session_state.query = "3ヶ月で関東大会に出場するためには？"
+        if st.button("📌 16歳以下で4C大会ベスト4を目指すには?"):
+            st.session_state.query = "16歳以下の4C大会でベスト4に入るための効果的な練習方法と目標設定を教えてください"
     with col2:
-        if st.button("📌 バックハンド強化の成功例は?"):
-            st.session_state.query = "12歳でバックハンドを強化したい生徒の成功例を教えて"
+        if st.button("📌 試合の入りを改善する方法は?"):
+            st.session_state.query = "試合の序盤でミスが多い生徒への指導方法を教えてください"
     with col3:
-        if st.button("📌 自信をつける方法は?"):
-            st.session_state.query = "自信をつけるための効果的なアプローチを教えて"
+        if st.button("📌 メンタル強化のアプローチは?"):
+            st.session_state.query = "プレッシャーに弱い生徒のメンタル強化方法を教えてください"
     
     # 検索入力
     query = st.text_area(
         "質問を入力してください",
         value=st.session_state.get('query', ''),
-        height=120,
+        height=100,
         placeholder="例: テニスで試合に勝てない中学生にどのような目標設定をすればいいですか？"
     )
     
@@ -741,24 +622,30 @@ def main():
         st.markdown(answer)
         
         # 参考データ表示
-        st.markdown("---")
-        st.subheader("📚 参考にした過去のデータ（上位10件）")
-        
-        for i, result in enumerate(search_results[:10], 1):
-            student_name = result['metadata'].get('student_name', '不明')
-            data_type = result['metadata'].get('type', 'unknown')
-            subtype = result['metadata'].get('subtype', '')
-            similarity = result['similarity']
+        if search_results:
+            st.markdown("---")
+            st.subheader("📚 参考にした過去のデータ")
             
-            with st.expander(
-                f"{i}. {student_name} - {data_type}: {subtype} (関連度: {similarity:.2%})"
-            ):
-                st.text(result['chunk'])
-                st.caption(f"関連度スコア: {result['distance']:.4f}")
+            for i, result in enumerate(search_results, 1):
+                student_name = result['metadata'].get('student_name', '不明')
+                content_type = result['metadata'].get('content_type', '')
+                similarity = result['similarity']
+                
+                with st.expander(
+                    f"{i}. {student_name} - {content_type} (関連度: {similarity:.1%})"
+                ):
+                    # チャンク内容を整形して表示
+                    content_lines = result['chunk'].split('\n')
+                    for line in content_lines[:30]:  # 最初の30行まで表示
+                        if line.strip():
+                            st.text(line)
+                    if len(content_lines) > 30:
+                        st.text("...")
+                        st.caption(f"（全{len(content_lines)}行）")
     
     # 付帯情報
     st.markdown("---")
-    st.info(f"📁 データファイル: {DATA_FILE}")
+    st.caption(f"📁 データファイル: {DATA_FILE} | 💾 チャンク数: {len(assistant.chunks)}")
 
 if __name__ == "__main__":
     main()
